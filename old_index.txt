@@ -1,0 +1,136 @@
+const express = require("express");
+const fs = require("fs");
+const users = require("./MOCK_DATA.json");
+const mongoose = require("mongoose");
+
+const app = express();
+const PORT = 8000;
+
+//conctions
+
+// mongoose
+//   .connect("mongodb://127.0.0.1:27017/restApi")
+// .then(() => console.log("MongoDB Connect"))
+//   .then((err) => console.log("Mongo err", err));
+
+main().catch(err => console.log(err));
+
+async function main() {
+  await mongoose.connect('mongodb://127.0.0.1:27017/test-app')
+  .then(() => console.log("MongoDB Connect"));
+
+  // use `await mongoose.connect('mongodb://user:password@127.0.0.1:27017/test');` if your database has auth enabled
+}
+
+//schema
+const userSchema = new mongoose.Schema({
+  first_name: {
+    type: String,
+    required: true,
+  },
+  last_name: {
+    type: String,
+    required: false,
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  jobTitle: {
+    type: String,
+  },
+  gender: {
+    type: String,
+  },
+});
+
+//model
+const User = mongoose.model("User", userSchema);
+
+app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  fs.appendFile(
+    "log.txt",
+    `\n${Date.now()}:${req.ip} ${req.method}: ${req.path}`,
+    (err, res) => {
+      next();
+    }
+  );
+});
+
+app.get("/users", (req, res) => {
+  const html = `
+  <ul>
+  ${users.map((user) => `<li>${user.first_name}</li>`).join("")}
+  </ul>
+  `;
+  res.send(html);
+});
+
+app.get("/api/users", (req, res) => {
+  res.json(users);
+});
+
+app.get("/api/users/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const user = users.find((user) => user.id === id);
+  return res.json(user);
+});
+
+app.post("/api/users", (req, res) => {
+  const body = req.body;
+  console.log("body: ", body);
+  const newUser = { ...body, id: users.length + 1 };
+  users.push(newUser);
+  fs.writeFile("./MOCK_DATA.json", JSON.stringify(users), (err) => {
+    if (err) {
+      console.error("Error writing to file:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+    return res.status(201).json({ status: "success", user: newUser });
+  });
+});
+
+app.patch("/api/users/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const updateUser = req.body;
+  const index = users.findIndex((user) => user.id === id);
+  if (index !== -1) {
+    users[index] = { ...users[index], ...updateUser };
+    fs.writeFile("./MOCK_DATA.json", JSON.stringify(users), (err) => {
+      if (err) {
+        console.error("Error writing to file:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+      return res.status(200).json({ status: "success", user: users[index] });
+    });
+  } else {
+    return res.status(404).json({ error: "User not found" });
+  }
+});
+
+app.delete("/api/users/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const index = users.findIndex((user) => user.id === id);
+  if (index !== -1) {
+    users.splice(index, 1);
+    fs.writeFile("./MOCK_DATA.json", JSON.stringify(users), (err) => {
+      if (err) {
+        console.error("Error writing to file:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+      return res
+        .status(200)
+        .json({ status: "success", message: "User deleted" });
+    });
+  } else {
+    return res.status(404).json({ error: "User not found" });
+  }
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
